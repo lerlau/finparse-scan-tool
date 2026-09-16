@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Scan to PDF</title>
-<meta name="description" content="Turn phone photos into a single downloadable PDF — works on any network, no server or app install needed.">
+<meta name="description" content="Photos in, a cropped, scanned-looking PDF out — auto-crops each photo to just the document, works on any network, no server or app install needed.">
 <meta name="theme-color" content="#01696F">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -201,6 +201,28 @@
     padding: 2px 4px;
     border-radius: 3px;
   }
+  .page-flag {
+    position: absolute;
+    right: 3px; bottom: 3px;
+    background: rgba(179,38,30,0.85);
+    color: #fff;
+    font-size: 8.5px;
+    font-weight: 700;
+    line-height: 1;
+    padding: 2px 4px;
+    border-radius: 3px;
+  }
+  .thumb-processing {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0,0,0,0.45);
+  }
+  .thumb-processing .spinner {
+    border-color: rgba(255,255,255,0.35);
+  }
 
   .page-meta {
     flex: 1;
@@ -327,7 +349,7 @@
     </div>
     <div>
       <h1>Scan to PDF</h1>
-      <p>Photos in, one PDF out — works on any network, no server or app install needed. Save it here, then AirDrop, email, or cloud-sync it over to upload into FinParse.</p>
+      <p>Each photo is auto-cropped to just the document — no background, like a real scan — then bundled into one PDF. Works on any network, no server needed. Save it here, then AirDrop, email, or cloud-sync it over to upload into FinParse.</p>
     </div>
   </header>
 
@@ -369,10 +391,84 @@
 (function () {
   'use strict';
 
-  /** @type {{id:string, file:File, url:string, rotation:number, w:number, h:number}[]} */
+  /** @type {{id:string, file:File, url:string, rotation:number, w:number, h:number, status:string, detected:boolean}[]} */
   var pages = [];
   var nextId = 1;
   var toastTimer = null;
+
+  // ── Document edge-detect + perspective-correct (the same engine FinParse's
+  // own live camera scanner uses — jscanify on top of opencv.js, shipped as
+  // local files so this works with zero external network dependency once
+  // the page itself has loaded). Loaded lazily on first photo, not on page
+  // load, since opencv.js is a multi-MB WASM payload nobody should pay for
+  // just to open this page. ──
+  var libsPromise = null;
+  var scannerInstance = null;
+
+  function loadScript(src) {
+    return new Promise(function (resolve, reject) {
+      if (document.querySelector('script[src="' + src + '"]')) { resolve(); return; }
+      var s = document.createElement('script');
+      s.src = src;
+      s.async = true;
+      s.onload = function () { resolve(); };
+      s.onerror = function () { reject(new Error('Failed to load ' + src)); };
+      document.body.appendChild(s);
+    });
+  }
+
+  function loadScannerLibs() {
+    if (!libsPromise) {
+      libsPromise = loadScript('opencv/opencv.js').then(function () {
+        return new Promise(function (resolve, reject) {
+          var cv = window.cv;
+          if (!cv) { reject(new Error('opencv.js loaded but window.cv is missing')); return; }
+          var onReady = function () { loadScript('opencv/jscanify.js').then(resolve).catch(reject); };
+          if (cv.Mat) onReady();
+          else cv['onRuntimeInitialized'] = onReady;
+        });
+      });
+    }
+    return libsPromise;
+  }
+
+  function ensureScanner() {
+    return loadScannerLibs().then(function () {
+      if (!scannerInstance) scannerInstance = new window.jscanify();
+      return scannerInstance;
+    });
+  }
+
+  // Runs the crop against one already-picked photo — perspective-corrects to
+  // just the document when edges are found, falls back to the original
+  // photo untouched when they aren't (never a dead end).
+  function extractPaper(scanner, file) {
+    return new Promise(function (resolve, reject) {
+      var img = new Image();
+      var url = URL.createObjectURL(file);
+      img.onload = function () {
+        try {
+          var canvas = document.createElement('canvas');
+          canvas.width = img.naturalWidth;
+          canvas.height = img.naturalHeight;
+          canvas.getContext('2d').drawImage(img, 0, 0);
+          var result = scanner.extractPaper(canvas, canvas.width, canvas.height);
+          var detected = !!result;
+          if (!result) result = canvas;
+          result.toBlob(function (blob) {
+            URL.revokeObjectURL(url);
+            if (!blob) { reject(new Error('Could not process this photo')); return; }
+            resolve({ blob: blob, detected: detected });
+          }, 'image/jpeg', 0.92);
+        } catch (e) {
+          URL.revokeObjectURL(url);
+          reject(e);
+        }
+      };
+      img.onerror = function () { URL.revokeObjectURL(url); reject(new Error('Could not read this photo')); };
+      img.src = url;
+    });
+  }
 
   var stackEl = document.getElementById('stack');
   var emptyEl = document.getElementById('emptyState');
@@ -411,15 +507,36 @@
 
     files.forEach(function (file) {
       var id = 'p' + (nextId++);
-      var url = URL.createObjectURL(file);
-      var entry = { id: id, file: file, url: url, rotation: 0, w: 0, h: 0 };
+      var entry = {
+        id: id, file: file, url: URL.createObjectURL(file),
+        rotation: 0, w: 0, h: 0, status: 'processing', detected: true,
+      };
       pages.push(entry);
-      loadImage(url).then(function (img) {
+      render();
+
+      ensureScanner().then(function (scanner) {
+        return extractPaper(scanner, file);
+      }).then(function (out) {
+        URL.revokeObjectURL(entry.url);
+        entry.url = URL.createObjectURL(out.blob);
+        entry.detected = out.detected;
+        entry.status = 'ready';
+        return loadImage(entry.url);
+      }).then(function (img) {
         entry.w = img.naturalWidth;
         entry.h = img.naturalHeight;
         render();
       }).catch(function () {
-        // still keep it in the stack — PDF step will surface the read error if it persists
+        // Cropping failed outright (corrupt file, scanner lib wouldn't load) —
+        // keep the untouched original rather than dropping the page.
+        entry.status = 'ready';
+        entry.detected = false;
+        loadImage(entry.url).then(function (img) {
+          entry.w = img.naturalWidth;
+          entry.h = img.naturalHeight;
+          render();
+        }).catch(function () {});
+        render();
       });
     });
     render();
@@ -450,22 +567,32 @@
     render();
   }
 
+  function anyProcessing() {
+    return pages.some(function (p) { return p.status === 'processing'; });
+  }
+
   function render() {
     var has = pages.length > 0;
     emptyEl.hidden = has;
     stackEl.hidden = !has;
-    saveBtn.disabled = !has;
+    saveBtn.disabled = !has || anyProcessing();
     countEl.textContent = pages.length + (pages.length === 1 ? ' page' : ' pages');
 
     stackEl.innerHTML = '';
     pages.forEach(function (p, i) {
       var row = document.createElement('div');
       row.className = 'page-row';
+      var processing = p.status === 'processing';
+      var flag = !processing && !p.detected
+        ? '<span class="page-flag" title="Edges weren\'t detected — using the original photo">RAW</span>' : '';
       row.innerHTML =
-        '<div class="thumb-wrap"><img src="' + p.url + '" style="transform:rotate(' + p.rotation + 'deg) scale(' + (p.rotation % 180 ? (p.h && p.w ? Math.max(p.w, p.h) / Math.min(p.w, p.h) : 1) : 1) + ');" alt="Page ' + (i + 1) + '"><span class="page-no mono">' + (i + 1) + '</span></div>' +
+        '<div class="thumb-wrap"><img src="' + p.url + '" style="transform:rotate(' + p.rotation + 'deg) scale(' + (p.rotation % 180 ? (p.h && p.w ? Math.max(p.w, p.h) / Math.min(p.w, p.h) : 1) : 1) + ');" alt="Page ' + (i + 1) + '">' +
+          '<span class="page-no mono">' + (i + 1) + '</span>' + flag +
+          (processing ? '<span class="thumb-processing"><span class="spinner" aria-hidden="true"></span></span>' : '') +
+        '</div>' +
         '<div class="page-meta">' +
           '<div class="name">' + escapeHtml(p.file.name || 'Photo ' + (i + 1)) + '</div>' +
-          '<div class="size mono">' + fmtSize(p.file.size) + '</div>' +
+          '<div class="size mono">' + (processing ? 'Cropping to document…' : fmtSize(p.file.size)) + '</div>' +
         '</div>' +
         '<div class="page-actions">' +
           '<div class="row-btns">' +
@@ -545,7 +672,7 @@
   }
 
   function setSaving(isSaving) {
-    saveBtn.disabled = isSaving || pages.length === 0;
+    saveBtn.disabled = isSaving || pages.length === 0 || anyProcessing();
     saveLabel.innerHTML = isSaving
       ? '<span class="spinner" aria-hidden="true"></span> Building PDF…'
       : 'Save PDF';
@@ -587,6 +714,7 @@
 
   function handleSave() {
     if (!pages.length) return;
+    if (anyProcessing()) { showToast('Still cropping — one moment.'); return; }
     setSaving(true);
     buildPdf().then(function (doc) {
       var blob = doc.output('blob');
