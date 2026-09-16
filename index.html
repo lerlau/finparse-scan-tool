@@ -1,0 +1,621 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Scan to PDF</title>
+<meta name="description" content="Turn phone photos into a single downloadable PDF — works on any network, no server or app install needed.">
+<meta name="theme-color" content="#01696F">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Scan to PDF">
+<meta name="mobile-web-app-capable" content="yes">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="data:image/png;base64,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">
+<link rel="icon" type="image/png" sizes="32x32" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAIAAAD8GO2jAAAC40lEQVR4nO2WS0gVYRTH/+d838ykdu/10YNKqp1GUIFItO5BURDRIjAyTCKCxMgWLiKiNi5a1KICiQh6U0QQQgUS7SIK3BSWZHXtYZGmXu8d7p2Z77RI08iZe0mEgg6zO8P5feec/3++IdrfjJkMntHq/wF/BUBHpxUzhaQCY2S6ACLfdeF5APCzGAHMAFBczEQieSihACIyudzW2pq62hqt1M8+AmNS2eyn4ZEjd+4KwEqZSMbUACIyvl+RiF9v3N35sufr8AhrBUCMlMxyGtasBrCycuGWU2eFiJkjGCEAACLFjuOL7Ll09cvbJBwHAHxPlZV9aDtef/Hy+V11Dw43bzh5mrUipcJmFaUiESFgXiymSxNOIm4n4jqRmB+Lldh2V9+HJS2tlaWJ2wf2sQgZE6aF/DINjPED45uJZ7bjPGpp6jzURETbVq04V78zyHlEUyPyyHTiIERGRGk9lMnsu3Jj6ZxyrZTb07tgbsX66ipYOmwNhQFEvGwWIgACoL3jHkwA28Foesfmjeuqq2DMmHb/ACAilqWrKxfRuBk0s0DefB1MKxVz7LDpFwRgoqzvL6wov7W3QamxMxLgBWZ7+4Xn/Z/zmjkPwIgU2daL3mTV0RPAeAsEGCGtYdnRLiuoAzfnLV4w78beBib+oRQR+CZovHSt+1UPh4inUICI2Fq/HRg81nFvvDy0YgD9IymE+6tQABF5QTA3Hm/dsJaJBRCR+ouX+94ldVkpiKe7g0DEVro/Ndh2v5OJBCIi6VzWLk0wsyGifB/UKAATaeaMl8sMDd9//ARixhKOA2IwwXUzuZyto4pMnROAWH0bTQ+Mph8ePJByXWtSFSMiAiL4nl9ZUf40mUQQsGVNqagQgAgpTrnuutNnNi1fpibdB7+eAqPZ7M1nXaR12JhCuxMRsqzu9x+7X7+ZdJ/9FkQoKiKtwzYRuWQRZVvs2FHvAIFIxJ7zOzmvV6Pj3/8v+vcB3wE/oUg1hmlaSgAAAABJRU5ErkJggg==">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&family=IBM+Plex+Mono:wght@500;600&display=swap">
+<style>
+  :root {
+    color-scheme: light dark;
+    --bg: #F7F6F2;
+    --surface: #FFFFFF;
+    --surface-2: #FBFAF7;
+    --border: #DAD5C9;
+    --ink: #26241D;
+    --muted: #7C776C;
+    --accent: #01696F;
+    --accent-ink: #FFFFFF;
+    --accent-soft: #E3F1F1;
+    --danger: #B3261E;
+    --danger-soft: #FBEAE8;
+    --shadow: rgba(38, 36, 29, 0.10);
+    padding-top: env(safe-area-inset-top, 0px);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #1C1A16;
+      --surface: #26241E;
+      --surface-2: #2D2A23;
+      --border: #3D392F;
+      --ink: #F2EFE7;
+      --muted: #A79F8E;
+      --accent: #3BC1C3;
+      --accent-ink: #07211F;
+      --accent-soft: #203836;
+      --danger: #FF8A80;
+      --danger-soft: #3A2420;
+      --shadow: rgba(0, 0, 0, 0.45);
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #1C1A16;
+    --surface: #26241E;
+    --surface-2: #2D2A23;
+    --border: #3D392F;
+    --ink: #F2EFE7;
+    --muted: #A79F8E;
+    --accent: #3BC1C3;
+    --accent-ink: #07211F;
+    --accent-soft: #203836;
+    --danger: #FF8A80;
+    --danger-soft: #3A2420;
+    --shadow: rgba(0, 0, 0, 0.45);
+  }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  [hidden] { display: none !important; }
+  img { max-width: 100%; }
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: 'Manrope', system-ui, -apple-system, 'Segoe UI', sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  .mono {
+    font-family: 'IBM Plex Mono', ui-monospace, SFMono-Regular, monospace;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .wrap {
+    max-width: 560px;
+    margin: 0 auto;
+    padding-inline: 18px;
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
+  }
+
+  header {
+    position: sticky;
+    top: env(safe-area-inset-top, 0px);
+    z-index: 10;
+    background: var(--bg);
+    padding-block: 18px 12px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+  }
+  .mark {
+    flex: none;
+    width: 38px;
+    height: 38px;
+    border-radius: 10px;
+    background: var(--accent);
+    display: grid;
+    place-items: center;
+  }
+  .mark svg { width: 20px; height: 20px; }
+  header h1 {
+    margin: 0;
+    font-size: 19px;
+    font-weight: 800;
+    letter-spacing: -0.01em;
+  }
+  header p {
+    margin: 3px 0 0;
+    font-size: 12.5px;
+    line-height: 1.45;
+    color: var(--muted);
+    max-width: 40ch;
+  }
+
+  .add-row {
+    display: flex;
+    gap: 10px;
+    padding-block: 14px;
+  }
+  .add-btn {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 13px 10px;
+    border-radius: 10px;
+    border: 1.5px solid var(--border);
+    background: var(--surface);
+    color: var(--ink);
+    font: inherit;
+    font-weight: 700;
+    font-size: 13.5px;
+    cursor: pointer;
+  }
+  .add-btn.primary {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: var(--accent-ink);
+  }
+  .add-btn svg { width: 17px; height: 17px; flex: none; }
+  .add-btn:active { transform: scale(0.98); }
+
+  main { flex: 1; padding-bottom: 24px; }
+
+  .empty {
+    margin-top: 8px;
+    border: 1.5px dashed var(--border);
+    border-radius: 14px;
+    padding: 36px 22px;
+    text-align: center;
+    color: var(--muted);
+  }
+  .empty svg { width: 34px; height: 34px; opacity: 0.55; margin-bottom: 10px; }
+  .empty p { margin: 0; font-size: 13.5px; line-height: 1.6; max-width: 32ch; margin-inline: auto; }
+  .empty strong { color: var(--ink); }
+
+  .stack { display: flex; flex-direction: column; gap: 10px; }
+
+  .page-row {
+    display: flex;
+    align-items: stretch;
+    gap: 12px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 10px;
+  }
+  .thumb-wrap {
+    flex: none;
+    width: 58px;
+    height: 74px;
+    border-radius: 6px;
+    overflow: hidden;
+    background: var(--surface-2);
+    box-shadow: 0 1px 0 var(--surface), 0 3px 6px var(--shadow);
+    position: relative;
+  }
+  .thumb-wrap img {
+    width: 100%; height: 100%;
+    object-fit: cover;
+    display: block;
+  }
+  .page-no {
+    position: absolute;
+    left: 3px; bottom: 3px;
+    background: rgba(0,0,0,0.55);
+    color: #fff;
+    font-size: 9.5px;
+    line-height: 1;
+    padding: 2px 4px;
+    border-radius: 3px;
+  }
+
+  .page-meta {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 3px;
+  }
+  .page-meta .name {
+    font-size: 13px;
+    font-weight: 700;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .page-meta .size {
+    font-size: 11.5px;
+    color: var(--muted);
+  }
+
+  .page-actions {
+    flex: none;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    align-items: center;
+    gap: 4px;
+  }
+  .row-btns { display: flex; gap: 4px; }
+  .icon-btn {
+    width: 28px; height: 28px;
+    border-radius: 7px;
+    border: 1px solid var(--border);
+    background: var(--surface-2);
+    color: var(--muted);
+    display: grid;
+    place-items: center;
+    cursor: pointer;
+    padding: 0;
+  }
+  .icon-btn svg { width: 14px; height: 14px; }
+  .icon-btn:active { transform: scale(0.94); }
+  .icon-btn.danger { color: var(--danger); }
+  .icon-btn:disabled { opacity: 0.35; cursor: default; }
+
+  footer {
+    position: sticky;
+    bottom: 0;
+    padding-block: 12px calc(14px + env(safe-area-inset-bottom, 0px));
+    background: linear-gradient(to top, var(--bg) 65%, transparent);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+  }
+  .count {
+    font-size: 12px;
+    color: var(--muted);
+  }
+  .count strong { color: var(--ink); }
+  .save-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 13px 22px;
+    border-radius: 10px;
+    border: none;
+    background: var(--accent);
+    color: var(--accent-ink);
+    font: inherit;
+    font-weight: 800;
+    font-size: 14px;
+    cursor: pointer;
+  }
+  .save-btn:disabled { opacity: 0.4; cursor: default; }
+  .save-btn svg { width: 16px; height: 16px; }
+
+  .spinner {
+    width: 14px; height: 14px;
+    border-radius: 50%;
+    border: 2px solid rgba(255,255,255,0.35);
+    border-top-color: currentColor;
+    animation: spin 0.7s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .toast {
+    position: fixed;
+    left: 50%;
+    bottom: calc(84px + env(safe-area-inset-bottom, 0px));
+    transform: translate(-50%, 8px);
+    background: var(--ink);
+    color: var(--bg);
+    padding: 10px 16px;
+    border-radius: 10px;
+    font-size: 13px;
+    font-weight: 600;
+    max-width: calc(100% - 36px);
+    text-align: center;
+    box-shadow: 0 8px 24px var(--shadow);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.2s ease, transform 0.2s ease;
+    z-index: 50;
+  }
+  .toast.show { opacity: 1; transform: translate(-50%, 0); }
+  .toast.error { background: var(--danger); color: #fff; }
+
+  input[type="file"] { display: none; }
+
+  @media (prefers-reduced-motion: reduce) {
+    .spinner { animation: none; }
+    .toast { transition: none; }
+  }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <header>
+    <div class="mark" aria-hidden="true">
+      <svg viewBox="0 0 24 24" fill="none"><path d="M6 3h9l5 5v13a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1Z" stroke="#fff" stroke-width="1.6" stroke-linejoin="round"/><path d="M14 3v5h5" stroke="#fff" stroke-width="1.6" stroke-linejoin="round"/><path d="M8.5 12.5h7M8.5 15.5h7M8.5 18h4.5" stroke="#fff" stroke-width="1.4" stroke-linecap="round"/></svg>
+    </div>
+    <div>
+      <h1>Scan to PDF</h1>
+      <p>Photos in, one PDF out — works on any network, no server or app install needed. Save it here, then AirDrop, email, or cloud-sync it over to upload into FinParse.</p>
+    </div>
+  </header>
+
+  <main>
+    <div class="add-row">
+      <button class="add-btn primary" id="btnCamera" type="button">
+        <svg viewBox="0 0 24 24" fill="none"><path d="M4 8h3l1.5-2h7L17 8h3a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><circle cx="12" cy="13.5" r="3.3" stroke="currentColor" stroke-width="1.7"/></svg>
+        Take Photo
+      </button>
+      <button class="add-btn" id="btnLibrary" type="button">
+        <svg viewBox="0 0 24 24" fill="none"><rect x="3.5" y="4.5" width="17" height="15" rx="2" stroke="currentColor" stroke-width="1.7"/><path d="M3.5 15.5 8 11l3 3 4-4.5 5.5 6" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><circle cx="8.2" cy="8.7" r="1.3" fill="currentColor"/></svg>
+        Choose from Library
+      </button>
+      <input type="file" id="cameraInput" accept="image/*" capture="environment">
+      <input type="file" id="libraryInput" accept="image/*" multiple>
+    </div>
+
+    <div class="empty" id="emptyState">
+      <svg viewBox="0 0 24 24" fill="none" style="margin-inline:auto;"><path d="M6 3h9l5 5v13a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1Z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/><path d="M14 3v5h5" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg>
+      <p><strong>No pages yet.</strong> Take a photo of each document, or pick some from your library — they'll stack up here in order.</p>
+    </div>
+
+    <div class="stack" id="stack" hidden></div>
+  </main>
+
+  <footer>
+    <div class="count mono" id="countLabel">0 pages</div>
+    <button class="save-btn" id="saveBtn" disabled type="button">
+      <svg viewBox="0 0 24 24" fill="none"><path d="M12 3v12m0 0-4-4m4 4 4-4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M4 16v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+      <span id="saveLabel">Save PDF</span>
+    </button>
+  </footer>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/4.2.1/jspdf.umd.min.js"></script>
+<script>
+(function () {
+  'use strict';
+
+  /** @type {{id:string, file:File, url:string, rotation:number, w:number, h:number}[]} */
+  var pages = [];
+  var nextId = 1;
+  var toastTimer = null;
+
+  var stackEl = document.getElementById('stack');
+  var emptyEl = document.getElementById('emptyState');
+  var countEl = document.getElementById('countLabel');
+  var saveBtn = document.getElementById('saveBtn');
+  var saveLabel = document.getElementById('saveLabel');
+  var toastEl = document.getElementById('toast');
+
+  function showToast(msg, isError) {
+    toastEl.textContent = msg;
+    toastEl.classList.toggle('error', !!isError);
+    toastEl.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(function () { toastEl.classList.remove('show'); }, isError ? 4200 : 2600);
+  }
+
+  function fmtSize(bytes) {
+    if (bytes < 1024) return bytes + ' B';
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(0) + ' KB';
+    return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+  }
+
+  function loadImage(url) {
+    return new Promise(function (resolve, reject) {
+      var img = new Image();
+      img.onload = function () { resolve(img); };
+      img.onerror = function () { reject(new Error('Could not read this photo')); };
+      img.src = url;
+    });
+  }
+
+  function addFiles(fileList) {
+    var files = Array.prototype.slice.call(fileList || []);
+    files = files.filter(function (f) { return f.type.indexOf('image/') === 0; });
+    if (!files.length) return;
+
+    files.forEach(function (file) {
+      var id = 'p' + (nextId++);
+      var url = URL.createObjectURL(file);
+      var entry = { id: id, file: file, url: url, rotation: 0, w: 0, h: 0 };
+      pages.push(entry);
+      loadImage(url).then(function (img) {
+        entry.w = img.naturalWidth;
+        entry.h = img.naturalHeight;
+        render();
+      }).catch(function () {
+        // still keep it in the stack — PDF step will surface the read error if it persists
+      });
+    });
+    render();
+  }
+
+  function removePage(id) {
+    var idx = pages.findIndex(function (p) { return p.id === id; });
+    if (idx === -1) return;
+    URL.revokeObjectURL(pages[idx].url);
+    pages.splice(idx, 1);
+    render();
+  }
+
+  function movePage(id, dir) {
+    var idx = pages.findIndex(function (p) { return p.id === id; });
+    var target = idx + dir;
+    if (idx === -1 || target < 0 || target >= pages.length) return;
+    var tmp = pages[idx];
+    pages[idx] = pages[target];
+    pages[target] = tmp;
+    render();
+  }
+
+  function rotatePage(id) {
+    var p = pages.find(function (p) { return p.id === id; });
+    if (!p) return;
+    p.rotation = (p.rotation + 90) % 360;
+    render();
+  }
+
+  function render() {
+    var has = pages.length > 0;
+    emptyEl.hidden = has;
+    stackEl.hidden = !has;
+    saveBtn.disabled = !has;
+    countEl.textContent = pages.length + (pages.length === 1 ? ' page' : ' pages');
+
+    stackEl.innerHTML = '';
+    pages.forEach(function (p, i) {
+      var row = document.createElement('div');
+      row.className = 'page-row';
+      row.innerHTML =
+        '<div class="thumb-wrap"><img src="' + p.url + '" style="transform:rotate(' + p.rotation + 'deg) scale(' + (p.rotation % 180 ? (p.h && p.w ? Math.max(p.w, p.h) / Math.min(p.w, p.h) : 1) : 1) + ');" alt="Page ' + (i + 1) + '"><span class="page-no mono">' + (i + 1) + '</span></div>' +
+        '<div class="page-meta">' +
+          '<div class="name">' + escapeHtml(p.file.name || 'Photo ' + (i + 1)) + '</div>' +
+          '<div class="size mono">' + fmtSize(p.file.size) + '</div>' +
+        '</div>' +
+        '<div class="page-actions">' +
+          '<div class="row-btns">' +
+            '<button class="icon-btn" data-act="up" ' + (i === 0 ? 'disabled' : '') + ' aria-label="Move page ' + (i + 1) + ' up"><svg viewBox="0 0 24 24" fill="none"><path d="M12 19V5M6 11l6-6 6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>' +
+            '<button class="icon-btn" data-act="down" ' + (i === pages.length - 1 ? 'disabled' : '') + ' aria-label="Move page ' + (i + 1) + ' down"><svg viewBox="0 0 24 24" fill="none"><path d="M12 5v14M6 13l6 6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>' +
+          '</div>' +
+          '<div class="row-btns">' +
+            '<button class="icon-btn" data-act="rotate" aria-label="Rotate page ' + (i + 1) + '"><svg viewBox="0 0 24 24" fill="none"><path d="M20 12a8 8 0 1 1-2.6-5.9" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path d="M20 4v4.5h-4.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></button>' +
+            '<button class="icon-btn danger" data-act="remove" aria-label="Remove page ' + (i + 1) + '"><svg viewBox="0 0 24 24" fill="none"><path d="M5 7h14M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2m2 0-.7 12.1A2 2 0 0 1 14.3 21H9.7a2 2 0 0 1-2-1.9L7 7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></button>' +
+          '</div>' +
+        '</div>';
+      row.querySelector('[data-act="up"]').addEventListener('click', function () { movePage(p.id, -1); });
+      row.querySelector('[data-act="down"]').addEventListener('click', function () { movePage(p.id, 1); });
+      row.querySelector('[data-act="rotate"]').addEventListener('click', function () { rotatePage(p.id); });
+      row.querySelector('[data-act="remove"]').addEventListener('click', function () { removePage(p.id); });
+      stackEl.appendChild(row);
+    });
+  }
+
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  }
+
+  // Bakes a page's rotation into real pixels (canvas), downscales long edge to
+  // a legible-but-reasonable cap, and returns a JPEG data URL + final px size.
+  function renderPageToJpeg(p) {
+    return loadImage(p.url).then(function (img) {
+      var w = img.naturalWidth, h = img.naturalHeight;
+      var rotated = p.rotation % 180 !== 0;
+      var outW = rotated ? h : w;
+      var outH = rotated ? w : h;
+
+      var MAX_EDGE = 2000;
+      var scale = Math.min(1, MAX_EDGE / Math.max(outW, outH));
+      var cw = Math.round(outW * scale), ch = Math.round(outH * scale);
+
+      var canvas = document.createElement('canvas');
+      canvas.width = cw;
+      canvas.height = ch;
+      var ctx = canvas.getContext('2d');
+      ctx.save();
+      ctx.translate(cw / 2, ch / 2);
+      ctx.rotate((p.rotation * Math.PI) / 180);
+      var dw = w * scale, dh = h * scale;
+      ctx.drawImage(img, -dw / 2, -dh / 2, dw, dh);
+      ctx.restore();
+
+      return { dataUrl: canvas.toDataURL('image/jpeg', 0.85), w: cw, h: ch };
+    });
+  }
+
+  function buildPdf() {
+    if (!window.jspdf || !window.jspdf.jsPDF) {
+      return Promise.reject(new Error('The PDF library didn\'t load — check your connection and try again.'));
+    }
+    var jsPDF = window.jspdf.jsPDF;
+    return pages.reduce(function (chain, p, i) {
+      return chain.then(function (doc) {
+        return renderPageToJpeg(p).then(function (out) {
+          if (!doc) {
+            doc = new jsPDF({
+              unit: 'px',
+              format: [out.w, out.h],
+              orientation: out.w >= out.h ? 'l' : 'p',
+              hotfixes: ['px_scaling'],
+            });
+          } else {
+            doc.addPage([out.w, out.h], out.w >= out.h ? 'l' : 'p');
+          }
+          doc.addImage(out.dataUrl, 'JPEG', 0, 0, out.w, out.h);
+          return doc;
+        });
+      });
+    }, Promise.resolve(null));
+  }
+
+  function setSaving(isSaving) {
+    saveBtn.disabled = isSaving || pages.length === 0;
+    saveLabel.innerHTML = isSaving
+      ? '<span class="spinner" aria-hidden="true"></span> Building PDF…'
+      : 'Save PDF';
+  }
+
+  function stampedFilename() {
+    var stamp = new Date().toISOString().slice(0, 16).replace(/[-:T]/g, '').replace(/(\d{8})(\d{4})/, '$1-$2');
+    return 'scan-' + stamp + '.pdf';
+  }
+
+  // Offer the PDF to the OS share sheet when the platform supports sharing
+  // files (iOS Safari 15+, most modern mobile browsers) — that's the native
+  // "save to Files / AirDrop / Mail" path on a phone. Falls back to a plain
+  // browser download for desktop and any browser without file-sharing.
+  function offerFile(blob, filename) {
+    var file = null;
+    try { file = new File([blob], filename, { type: 'application/pdf' }); } catch (e) { /* ignore */ }
+
+    if (file && navigator.canShare && navigator.canShare({ files: [file] })) {
+      return navigator.share({ files: [file], title: filename }).then(function () {
+        showToast('Shared — save it from the share sheet.');
+      }).catch(function (err) {
+        if (err && err.name === 'AbortError') return; // they closed the share sheet — not an error
+        throw err;
+      });
+    }
+
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(function () { URL.revokeObjectURL(url); }, 30000);
+    showToast('Downloaded ' + filename + '.');
+    return Promise.resolve();
+  }
+
+  function handleSave() {
+    if (!pages.length) return;
+    setSaving(true);
+    buildPdf().then(function (doc) {
+      var blob = doc.output('blob');
+      return offerFile(blob, stampedFilename());
+    }).catch(function (err) {
+      showToast((err && err.message) || 'Could not build the PDF — try again.', true);
+    }).finally(function () {
+      setSaving(false);
+    });
+  }
+
+  document.getElementById('btnCamera').addEventListener('click', function () {
+    document.getElementById('cameraInput').click();
+  });
+  document.getElementById('btnLibrary').addEventListener('click', function () {
+    document.getElementById('libraryInput').click();
+  });
+  document.getElementById('cameraInput').addEventListener('change', function (e) {
+    addFiles(e.target.files);
+    e.target.value = '';
+  });
+  document.getElementById('libraryInput').addEventListener('change', function (e) {
+    addFiles(e.target.files);
+    e.target.value = '';
+  });
+  saveBtn.addEventListener('click', handleSave);
+
+  render();
+})();
+</script>
+</body>
+</html>
