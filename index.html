@@ -508,20 +508,91 @@
     return Math.abs(area) / 2;
   }
 
+  // "Scan" look: stretches the brightness histogram (per RGB channel, based
+  // on the overall 1st/99th percentile black/white points) so the page's
+  // white background actually reads as white and text reads crisp dark,
+  // instead of the flat, slightly grey contrast an ordinary phone photo
+  // has — the same auto-levels idea apps like CamScanner apply, not a full
+  // black-and-white conversion (colour and shadow gradients stay, just
+  // compressed less). Run before edge detection too: the real reason
+  // detection misses the page edge on a dim or evenly-lit photo is exactly
+  // this — weak contrast between the paper and the background — so the
+  // same pass that produces the "scanned" look also makes the edge easier
+  // to find in the first place. Mutates the canvas in place.
+  function enhanceDocument(canvas) {
+    var ctx = canvas.getContext('2d');
+    var w = canvas.width, h = canvas.height;
+    if (!w || !h) return;
+    var imgData = ctx.getImageData(0, 0, w, h);
+    var data = imgData.data;
+    var n = data.length / 4;
+
+    var histogram = new Uint32Array(256);
+    for (var i = 0; i < data.length; i += 4) {
+      var lum = (data[i] * 0.299 + data[i + 1] * 0.587 + data[i + 2] * 0.114) | 0;
+      histogram[lum >= 255 ? 255 : lum]++;
+    }
+
+    var clip = n * 0.01; // ignore the extreme 1% at each end as noise/outliers
+    var blackPoint = 0, cum = 0;
+    for (var v = 0; v < 256; v++) {
+      cum += histogram[v];
+      if (cum > clip) { blackPoint = v; break; }
+    }
+    var whitePoint = 255;
+    cum = 0;
+    for (var v2 = 255; v2 >= 0; v2--) {
+      cum += histogram[v2];
+      if (cum > clip) { whitePoint = v2; break; }
+    }
+    if (whitePoint <= blackPoint) return; // degenerate (near-solid) image — leave it alone
+
+    var range = whitePoint - blackPoint;
+    var CONTRAST = 1.15; // a little extra punch beyond the pure levels stretch
+    for (var j = 0; j < data.length; j += 4) {
+      for (var c = 0; c < 3; c++) {
+        var val = ((data[j + c] - blackPoint) / range) * 255;
+        val = (val - 128) * CONTRAST + 128;
+        data[j + c] = val < 0 ? 0 : (val > 255 ? 255 : val);
+      }
+    }
+    ctx.putImageData(imgData, 0, 0);
+  }
+
   // jscanify's extractPaper() just takes the single largest contour by area
   // with no check that it's even roughly the right shape or size — so a
   // strong internal feature (a stamp, a table's bold border, a hard shadow)
   // can beat the real page edge and "crop" to a corner of the document
-  // instead of the whole thing. This finds the contour ourselves first and
-  // only accepts it as the document if the quadrilateral it describes covers
-  // a sane share of the frame; otherwise it's treated as "not detected" and
-  // the original, uncropped photo is kept instead of a bad crop.
+  // instead of the whole thing. findPaperCorners() below finds the contour
+  // itself and only accepts it as the document if the quadrilateral it
+  // describes covers a sane share of the frame; otherwise it's treated as
+  // "not detected" and the original, uncropped photo is kept.
   var MIN_PAPER_AREA_FRACTION = 0.3;
+  // Edge/contour detection runs on a copy downscaled to this long edge —
+  // detection accuracy doesn't need full camera resolution, and running it
+  // (plus the contrast-enhance pass) on an 8-megapixel 4K frame is what made
+  // capture take several seconds. The one thing that DOES want full
+  // resolution — the final cropped image — still gets it: only the corner
+  // *coordinates* come from the small copy, scaled back up.
+  var DETECT_MAX_EDGE = 1000;
 
-  function cropCanvasToPaper(scanner, canvas) {
-    var detected = false;
-    var resultCanvas = null;
-    var cvImg = window.cv.imread(canvas);
+  // Locates the document within `source` (a canvas or a live <video>, hence
+  // needing its pixel dimensions passed separately) and returns its four
+  // corners in `source`'s own full-resolution coordinate space, or null if
+  // nothing sane was found.
+  function findPaperCorners(scanner, source, srcWidth, srcHeight) {
+    if (!srcWidth || !srcHeight) return null;
+    var scale = Math.min(1, DETECT_MAX_EDGE / Math.max(srcWidth, srcHeight));
+    var w = Math.max(1, Math.round(srcWidth * scale));
+    var h = Math.max(1, Math.round(srcHeight * scale));
+    var work = document.createElement('canvas');
+    work.width = w;
+    work.height = h;
+    work.getContext('2d', { willReadFrequently: true }).drawImage(source, 0, 0, w, h);
+    enhanceDocument(work); // boosts page-vs-background contrast for detection
+
+    var corners = null;
+    var cvImg = window.cv.imread(work);
     var contour = null;
     try {
       contour = scanner.findPaperContour(cvImg);
@@ -529,10 +600,14 @@
         var c = scanner.getCornerPoints(contour);
         if (c.topLeftCorner && c.topRightCorner && c.bottomLeftCorner && c.bottomRightCorner) {
           var quadArea = shoelaceArea([c.topLeftCorner, c.topRightCorner, c.bottomRightCorner, c.bottomLeftCorner]);
-          var frameArea = canvas.width * canvas.height;
-          if (frameArea > 0 && quadArea / frameArea >= MIN_PAPER_AREA_FRACTION) {
-            resultCanvas = scanner.extractPaper(canvas, canvas.width, canvas.height, c);
-            detected = !!resultCanvas;
+          if (quadArea / (w * h) >= MIN_PAPER_AREA_FRACTION) {
+            var inv = 1 / scale;
+            corners = {
+              topLeftCorner: { x: c.topLeftCorner.x * inv, y: c.topLeftCorner.y * inv },
+              topRightCorner: { x: c.topRightCorner.x * inv, y: c.topRightCorner.y * inv },
+              bottomLeftCorner: { x: c.bottomLeftCorner.x * inv, y: c.bottomLeftCorner.y * inv },
+              bottomRightCorner: { x: c.bottomRightCorner.x * inv, y: c.bottomRightCorner.y * inv },
+            };
           }
         }
       }
@@ -540,7 +615,15 @@
       cvImg.delete();
       if (contour) contour.delete();
     }
+    return corners;
+  }
+
+  function cropCanvasToPaper(scanner, canvas) {
+    var corners = findPaperCorners(scanner, canvas, canvas.width, canvas.height);
+    var resultCanvas = corners ? scanner.extractPaper(canvas, canvas.width, canvas.height, corners) : null;
+    var detected = !!resultCanvas;
     if (!resultCanvas) resultCanvas = canvas;
+    enhanceDocument(resultCanvas); // the "scanned" look — runs once, on the (usually much smaller) final image
     return { resultCanvas: resultCanvas, detected: detected };
   }
 
@@ -695,7 +778,10 @@
 
     ensureScanner().then(function () {
       return navigator.mediaDevices.getUserMedia({
-        video: { facingMode: { ideal: 'environment' }, width: { ideal: 1920 }, height: { ideal: 1080 } },
+        // 2560x1440 rather than full 4K: sharper than the original 1080p
+        // request, but 4K roughly quadruples the one-time capture/enhance
+        // cost for no visible benefit on a document's worth of text.
+        video: { facingMode: { ideal: 'environment' }, width: { ideal: 2560 }, height: { ideal: 1440 } },
         audio: false,
       });
     }).then(function (stream) {
@@ -722,35 +808,63 @@
     liveScannerEl.hidden = true;
   }
 
+  // Draws only the detected outline onto a transparent overlay canvas that
+  // sits on top of the live <video> — the video itself keeps playing at its
+  // full native resolution and frame rate underneath. (An earlier version
+  // used jscanify's highlightPaper(), which redraws the *entire* frame onto
+  // the overlay canvas at the 5fps detection rate — that's what actually
+  // made the preview look low-res and choppy: the smooth live video was
+  // being fully hidden behind a still image refreshed 5 times a second.)
   function lsLoop(ts) {
     lsRaf = requestAnimationFrame(lsLoop);
     if (!scannerInstance || lsVideo.readyState < 2 || !lsVideo.videoWidth) return;
     if (ts !== undefined && ts - lsLastDetect < LS_DETECT_INTERVAL_MS) return;
     lsLastDetect = ts || 0;
     try {
-      lsSourceCanvas.width = lsVideo.videoWidth;
-      lsSourceCanvas.height = lsVideo.videoHeight;
-      lsSourceCanvas.getContext('2d').drawImage(lsVideo, 0, 0);
-      var highlighted = scannerInstance.highlightPaper(lsSourceCanvas, { color: '#F5A524', thickness: 8 });
-      lsOverlay.width = lsSourceCanvas.width;
-      lsOverlay.height = lsSourceCanvas.height;
-      var ctx = lsOverlay.getContext('2d');
-      ctx.clearRect(0, 0, lsOverlay.width, lsOverlay.height);
-      ctx.drawImage(highlighted, 0, 0);
+      // Detects straight off the video element at a small downscaled size —
+      // no need to copy a full-resolution frame just to immediately shrink
+      // it. Corners come back already scaled to the video's real dimensions.
+      var corners = findPaperCorners(scannerInstance, lsVideo, lsVideo.videoWidth, lsVideo.videoHeight);
+
+      lsOverlay.width = lsVideo.videoWidth;
+      lsOverlay.height = lsVideo.videoHeight;
+      var octx = lsOverlay.getContext('2d');
+      octx.clearRect(0, 0, lsOverlay.width, lsOverlay.height);
+      if (corners) {
+        octx.strokeStyle = '#F5A524';
+        octx.lineWidth = 8;
+        octx.lineJoin = 'round';
+        octx.beginPath();
+        octx.moveTo(corners.topLeftCorner.x, corners.topLeftCorner.y);
+        octx.lineTo(corners.topRightCorner.x, corners.topRightCorner.y);
+        octx.lineTo(corners.bottomRightCorner.x, corners.bottomRightCorner.y);
+        octx.lineTo(corners.bottomLeftCorner.x, corners.bottomLeftCorner.y);
+        octx.closePath();
+        octx.stroke();
+      }
     } catch (e) { /* an occasional frame fails mid-detection — just skip it */ }
   }
 
   function lsCapture() {
     if (!lsVideo.videoWidth) return;
-    lsSourceCanvas.width = lsVideo.videoWidth;
-    lsSourceCanvas.height = lsVideo.videoHeight;
-    lsSourceCanvas.getContext('2d').drawImage(lsVideo, 0, 0);
-    var out = cropCanvasToPaper(scannerInstance, lsSourceCanvas);
-    out.resultCanvas.toBlob(function (blob) {
-      if (!blob) return;
-      closeLiveScanner();
-      addCapturedBlob(blob, out.detected);
-    }, 'image/jpeg', 0.92);
+    // Cropping/enhancing is synchronous and blocks the main thread, so a
+    // spinner started right before it wouldn't get a chance to paint. Show
+    // the "processing" state, then defer the heavy work one tick so the
+    // browser actually paints it first.
+    lsBottombar.hidden = true;
+    lsMsg.hidden = false;
+    lsMsg.textContent = 'Processing…';
+    setTimeout(function () {
+      lsSourceCanvas.width = lsVideo.videoWidth;
+      lsSourceCanvas.height = lsVideo.videoHeight;
+      lsSourceCanvas.getContext('2d').drawImage(lsVideo, 0, 0);
+      var out = cropCanvasToPaper(scannerInstance, lsSourceCanvas);
+      out.resultCanvas.toBlob(function (blob) {
+        if (!blob) return;
+        closeLiveScanner();
+        addCapturedBlob(blob, out.detected);
+      }, 'image/jpeg', 0.92);
+    }, 30);
   }
 
   document.getElementById('lsClose').addEventListener('click', closeLiveScanner);
