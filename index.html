@@ -338,6 +338,51 @@
     .spinner { animation: none; }
     .toast { transition: none; }
   }
+
+  .live-scanner {
+    position: fixed;
+    inset: 0;
+    background: #000;
+    z-index: 2000;
+    display: flex;
+    flex-direction: column;
+  }
+  .ls-topbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: calc(12px + env(safe-area-inset-top, 0px)) 16px 12px;
+    background: rgba(0,0,0,0.6);
+    color: #fff;
+  }
+  .ls-title { font-weight: 700; font-size: 15px; }
+  .ls-close { background: none; border: none; color: #fff; font-size: 26px; cursor: pointer; line-height: 1; padding: 4px; }
+  .ls-stage {
+    position: relative;
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+  }
+  #lsVideo { max-width: 100%; max-height: 100%; object-fit: contain; }
+  #lsOverlay { position: absolute; pointer-events: none; max-width: 100%; max-height: 100%; }
+  .ls-msg { color: #fff; text-align: center; padding: 24px; font-size: 14px; line-height: 1.6; max-width: 30ch; }
+  .ls-bottombar {
+    padding: 20px 16px calc(28px + env(safe-area-inset-bottom, 0px));
+    background: rgba(0,0,0,0.6);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .ls-capture {
+    width: 68px; height: 68px;
+    border-radius: 50%;
+    background: #fff;
+    border: 4px solid rgba(255,255,255,0.4);
+    cursor: pointer;
+  }
+  .ls-capture:active { transform: scale(0.95); }
 </style>
 </head>
 <body>
@@ -385,6 +430,21 @@
 </div>
 
 <div class="toast" id="toast"></div>
+
+<div class="live-scanner" id="liveScanner" hidden role="dialog" aria-modal="true" aria-label="Scan document">
+  <div class="ls-topbar">
+    <span class="ls-title">Scan document</span>
+    <button class="ls-close" id="lsClose" type="button" aria-label="Close">×</button>
+  </div>
+  <div class="ls-stage">
+    <div class="ls-msg" id="lsMsg" hidden></div>
+    <video id="lsVideo" playsinline muted></video>
+    <canvas id="lsOverlay"></canvas>
+  </div>
+  <div class="ls-bottombar" id="lsBottombar" hidden>
+    <button class="ls-capture" id="lsCapture" type="button" aria-label="Capture photo"></button>
+  </div>
+</div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/4.2.1/jspdf.umd.min.js"></script>
 <script>
@@ -439,6 +499,51 @@
     });
   }
 
+  function shoelaceArea(pts) {
+    var area = 0;
+    for (var i = 0; i < pts.length; i++) {
+      var a = pts[i], b = pts[(i + 1) % pts.length];
+      area += a.x * b.y - b.x * a.y;
+    }
+    return Math.abs(area) / 2;
+  }
+
+  // jscanify's extractPaper() just takes the single largest contour by area
+  // with no check that it's even roughly the right shape or size — so a
+  // strong internal feature (a stamp, a table's bold border, a hard shadow)
+  // can beat the real page edge and "crop" to a corner of the document
+  // instead of the whole thing. This finds the contour ourselves first and
+  // only accepts it as the document if the quadrilateral it describes covers
+  // a sane share of the frame; otherwise it's treated as "not detected" and
+  // the original, uncropped photo is kept instead of a bad crop.
+  var MIN_PAPER_AREA_FRACTION = 0.3;
+
+  function cropCanvasToPaper(scanner, canvas) {
+    var detected = false;
+    var resultCanvas = null;
+    var cvImg = window.cv.imread(canvas);
+    var contour = null;
+    try {
+      contour = scanner.findPaperContour(cvImg);
+      if (contour) {
+        var c = scanner.getCornerPoints(contour);
+        if (c.topLeftCorner && c.topRightCorner && c.bottomLeftCorner && c.bottomRightCorner) {
+          var quadArea = shoelaceArea([c.topLeftCorner, c.topRightCorner, c.bottomRightCorner, c.bottomLeftCorner]);
+          var frameArea = canvas.width * canvas.height;
+          if (frameArea > 0 && quadArea / frameArea >= MIN_PAPER_AREA_FRACTION) {
+            resultCanvas = scanner.extractPaper(canvas, canvas.width, canvas.height, c);
+            detected = !!resultCanvas;
+          }
+        }
+      }
+    } finally {
+      cvImg.delete();
+      if (contour) contour.delete();
+    }
+    if (!resultCanvas) resultCanvas = canvas;
+    return { resultCanvas: resultCanvas, detected: detected };
+  }
+
   // Runs the crop against one already-picked photo — perspective-corrects to
   // just the document when edges are found, falls back to the original
   // photo untouched when they aren't (never a dead end).
@@ -452,13 +557,11 @@
           canvas.width = img.naturalWidth;
           canvas.height = img.naturalHeight;
           canvas.getContext('2d').drawImage(img, 0, 0);
-          var result = scanner.extractPaper(canvas, canvas.width, canvas.height);
-          var detected = !!result;
-          if (!result) result = canvas;
-          result.toBlob(function (blob) {
+          var out = cropCanvasToPaper(scanner, canvas);
+          out.resultCanvas.toBlob(function (blob) {
             URL.revokeObjectURL(url);
             if (!blob) { reject(new Error('Could not process this photo')); return; }
-            resolve({ blob: blob, detected: detected });
+            resolve({ blob: blob, detected: out.detected });
           }, 'image/jpeg', 0.92);
         } catch (e) {
           URL.revokeObjectURL(url);
@@ -541,6 +644,117 @@
     });
     render();
   }
+
+  // Adds a blob that's already been through cropCanvasToPaper (the live
+  // scanner's capture path) directly, skipping addFiles' own crop step.
+  function addCapturedBlob(blob, detected) {
+    var id = 'p' + (nextId++);
+    var entry = {
+      id: id,
+      file: new File([blob], 'scan-' + id + '.jpg', { type: 'image/jpeg' }),
+      url: URL.createObjectURL(blob),
+      rotation: 0, w: 0, h: 0, status: 'ready', detected: detected,
+    };
+    pages.push(entry);
+    render();
+    loadImage(entry.url).then(function (img) {
+      entry.w = img.naturalWidth;
+      entry.h = img.naturalHeight;
+      render();
+    }).catch(function () {});
+  }
+
+  // ── Live camera scanner: a real-time preview with the detected document's
+  // edges highlighted as you move the phone, so you can adjust the angle
+  // until the overlay locks onto the actual page before capturing — the same
+  // idea FinParse's own desktop app scanner uses. Needs getUserMedia, which
+  // in turn needs a secure context (https) — this page being on GitHub Pages
+  // rather than a bare http://<lan-ip> link is exactly what makes that
+  // available here. Falls back straight to the native camera app (via the
+  // hidden file input) if the camera can't be opened for any reason. ──
+  var LS_DETECT_INTERVAL_MS = 200;
+  var lsStream = null;
+  var lsRaf = 0;
+  var lsLastDetect = 0;
+  var lsSourceCanvas = document.createElement('canvas');
+  var liveScannerEl = document.getElementById('liveScanner');
+  var lsVideo = document.getElementById('lsVideo');
+  var lsOverlay = document.getElementById('lsOverlay');
+  var lsMsg = document.getElementById('lsMsg');
+  var lsBottombar = document.getElementById('lsBottombar');
+
+  function openLiveScanner() {
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      document.getElementById('cameraInput').click();
+      return;
+    }
+    liveScannerEl.hidden = false;
+    lsMsg.hidden = false;
+    lsMsg.textContent = 'Starting camera…';
+    lsBottombar.hidden = true;
+
+    ensureScanner().then(function () {
+      return navigator.mediaDevices.getUserMedia({
+        video: { facingMode: { ideal: 'environment' }, width: { ideal: 1920 }, height: { ideal: 1080 } },
+        audio: false,
+      });
+    }).then(function (stream) {
+      lsStream = stream;
+      lsVideo.srcObject = stream;
+      return lsVideo.play();
+    }).then(function () {
+      lsMsg.hidden = true;
+      lsBottombar.hidden = false;
+      lsLastDetect = 0;
+      lsRaf = requestAnimationFrame(lsLoop);
+    }).catch(function () {
+      // Permission denied, no camera, or the scanner libs failed to load —
+      // never dead-end, just fall back to the native camera app.
+      closeLiveScanner();
+      document.getElementById('cameraInput').click();
+    });
+  }
+
+  function closeLiveScanner() {
+    cancelAnimationFrame(lsRaf);
+    if (lsStream) { lsStream.getTracks().forEach(function (t) { t.stop(); }); lsStream = null; }
+    lsVideo.srcObject = null;
+    liveScannerEl.hidden = true;
+  }
+
+  function lsLoop(ts) {
+    lsRaf = requestAnimationFrame(lsLoop);
+    if (!scannerInstance || lsVideo.readyState < 2 || !lsVideo.videoWidth) return;
+    if (ts !== undefined && ts - lsLastDetect < LS_DETECT_INTERVAL_MS) return;
+    lsLastDetect = ts || 0;
+    try {
+      lsSourceCanvas.width = lsVideo.videoWidth;
+      lsSourceCanvas.height = lsVideo.videoHeight;
+      lsSourceCanvas.getContext('2d').drawImage(lsVideo, 0, 0);
+      var highlighted = scannerInstance.highlightPaper(lsSourceCanvas, { color: '#F5A524', thickness: 8 });
+      lsOverlay.width = lsSourceCanvas.width;
+      lsOverlay.height = lsSourceCanvas.height;
+      var ctx = lsOverlay.getContext('2d');
+      ctx.clearRect(0, 0, lsOverlay.width, lsOverlay.height);
+      ctx.drawImage(highlighted, 0, 0);
+    } catch (e) { /* an occasional frame fails mid-detection — just skip it */ }
+  }
+
+  function lsCapture() {
+    if (!lsVideo.videoWidth) return;
+    lsSourceCanvas.width = lsVideo.videoWidth;
+    lsSourceCanvas.height = lsVideo.videoHeight;
+    lsSourceCanvas.getContext('2d').drawImage(lsVideo, 0, 0);
+    var out = cropCanvasToPaper(scannerInstance, lsSourceCanvas);
+    out.resultCanvas.toBlob(function (blob) {
+      if (!blob) return;
+      closeLiveScanner();
+      addCapturedBlob(blob, out.detected);
+    }, 'image/jpeg', 0.92);
+  }
+
+  document.getElementById('lsClose').addEventListener('click', closeLiveScanner);
+  document.getElementById('lsCapture').addEventListener('click', lsCapture);
 
   function removePage(id) {
     var idx = pages.findIndex(function (p) { return p.id === id; });
@@ -727,7 +941,7 @@
   }
 
   document.getElementById('btnCamera').addEventListener('click', function () {
-    document.getElementById('cameraInput').click();
+    openLiveScanner();
   });
   document.getElementById('btnLibrary').addEventListener('click', function () {
     document.getElementById('libraryInput').click();
