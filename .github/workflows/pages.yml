@@ -25,6 +25,11 @@ jobs:
 
       - name: Configure Pages
         uses: actions/configure-pages@v5
+        with:
+          # This repo has never had a Pages site — configure-pages only
+          # checks for one by default and 404s when there isn't one yet.
+          # enablement: true creates it (source: GitHub Actions) on first run.
+          enablement: true
 
       - name: Upload site
         uses: actions/upload-pages-artifact@v3
