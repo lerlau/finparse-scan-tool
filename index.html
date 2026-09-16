@@ -383,6 +383,64 @@
     cursor: pointer;
   }
   .ls-capture:active { transform: scale(0.95); }
+
+  .ls-continuous {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    background: none;
+    border: none;
+    color: rgba(255,255,255,0.75);
+    font: inherit;
+    font-size: 12.5px;
+    font-weight: 600;
+    cursor: pointer;
+    padding: 4px;
+  }
+  .ls-toggle-track {
+    width: 34px; height: 20px;
+    border-radius: 10px;
+    background: rgba(255,255,255,0.3);
+    position: relative;
+    flex: none;
+    transition: background 0.15s ease;
+  }
+  .ls-toggle-track::after {
+    content: '';
+    position: absolute;
+    top: 2px; left: 2px;
+    width: 16px; height: 16px;
+    border-radius: 50%;
+    background: #fff;
+    transition: transform 0.15s ease;
+  }
+  .ls-continuous[aria-pressed="true"] .ls-toggle-track { background: var(--accent); }
+  .ls-continuous[aria-pressed="true"] .ls-toggle-track::after { transform: translateX(14px); }
+  .ls-continuous[aria-pressed="true"] { color: #fff; }
+
+  .ls-counter-badge {
+    position: absolute;
+    left: 14px;
+    bottom: 14px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: rgba(0,0,0,0.6);
+    border-radius: 10px;
+    padding: 6px;
+    color: #fff;
+  }
+  .ls-counter-badge img {
+    width: 34px; height: 44px;
+    object-fit: cover;
+    border-radius: 5px;
+    display: block;
+  }
+  .ls-counter-badge .n {
+    font-weight: 800;
+    font-size: 14px;
+    padding-inline: 4px;
+  }
 </style>
 </head>
 <body>
@@ -433,13 +491,20 @@
 
 <div class="live-scanner" id="liveScanner" hidden role="dialog" aria-modal="true" aria-label="Scan document">
   <div class="ls-topbar">
-    <span class="ls-title">Scan document</span>
+    <button class="ls-continuous" id="lsContinuousToggle" type="button" aria-pressed="false">
+      <span class="ls-toggle-track" aria-hidden="true"></span>
+      Continuous
+    </button>
     <button class="ls-close" id="lsClose" type="button" aria-label="Close">×</button>
   </div>
   <div class="ls-stage">
     <div class="ls-msg" id="lsMsg" hidden></div>
     <video id="lsVideo" playsinline muted></video>
     <canvas id="lsOverlay"></canvas>
+    <div class="ls-counter-badge" id="lsCounterBadge" hidden>
+      <img id="lsCounterThumb" alt="Last captured page">
+      <span class="n mono" id="lsCounterN">1</span>
+    </div>
   </div>
   <div class="ls-bottombar" id="lsBottombar" hidden>
     <button class="ls-capture" id="lsCapture" type="button" aria-label="Capture photo"></button>
@@ -508,21 +573,59 @@
     return Math.abs(area) / 2;
   }
 
-  // "Scan" look: stretches the brightness histogram (per RGB channel, based
-  // on the overall 1st/99th percentile black/white points) so the page's
-  // white background actually reads as white and text reads crisp dark,
-  // instead of the flat, slightly grey contrast an ordinary phone photo
-  // has — the same auto-levels idea apps like CamScanner apply, not a full
-  // black-and-white conversion (colour and shadow gradients stay, just
-  // compressed less). Run before edge detection too: the real reason
-  // detection misses the page edge on a dim or evenly-lit photo is exactly
-  // this — weak contrast between the paper and the background — so the
-  // same pass that produces the "scanned" look also makes the edge easier
-  // to find in the first place. Mutates the canvas in place.
+  // "Scan" look, done the way real scanning software does it — two passes,
+  // not one:
+  //
+  // 1. Flat-field / illumination correction: divide the photo by a heavily
+  //    blurred copy of itself. A phone photo of a page almost never has
+  //    even lighting — a shadow from the hand or phone, a brighter patch
+  //    near a window — and a plain contrast stretch can't tell "this part
+  //    is darker because of shadow" from "this part is darker because
+  //    there's ink here". Dividing by the blurred version (which captures
+  //    just the *lighting*, since fine detail like text washes out under a
+  //    big blur) cancels the lighting out and leaves a page that's evenly
+  //    white all over — this is the actual "flat-field correction" trick;
+  //    a contrast stretch alone was never going to produce that.
+  // 2. A gentler levels/contrast stretch on top of the now-flattened image,
+  //    to make the remaining text crisp.
+  //
+  // Run before edge detection too — weak page-vs-background contrast on a
+  // shadowed or evenly-lit photo is exactly why detection misses the edge,
+  // so the pass that produces the "scanned" look also helps find the edge
+  // in the first place. Mutates the canvas in place.
   function enhanceDocument(canvas) {
-    var ctx = canvas.getContext('2d');
     var w = canvas.width, h = canvas.height;
     if (!w || !h) return;
+    var cv = window.cv;
+
+    var src = cv.imread(canvas); // RGBA
+    var rgb = new cv.Mat();
+    cv.cvtColor(src, rgb, cv.COLOR_RGBA2RGB);
+
+    // Kernel scales with image size so this works the same whether it's
+    // running on the small detection copy or the full-resolution capture.
+    var k = Math.round(Math.min(w, h) / 5) | 1; // must be odd
+    if (k < 21) k = 21;
+
+    var blurred = new cv.Mat();
+    cv.GaussianBlur(rgb, blurred, new cv.Size(k, k), 0, 0, cv.BORDER_REPLICATE);
+
+    var rgbF = new cv.Mat(), blurredF = new cv.Mat(), flat = new cv.Mat(), flat8 = new cv.Mat();
+    rgb.convertTo(rgbF, cv.CV_32F);
+    blurred.convertTo(blurredF, cv.CV_32F, 1, 1); // +1 so division never hits zero
+    cv.divide(rgbF, blurredF, flat, 255);
+    flat.convertTo(flat8, cv.CV_8U);
+
+    var rgba = new cv.Mat();
+    cv.cvtColor(flat8, rgba, cv.COLOR_RGB2RGBA);
+    cv.imshow(canvas, rgba);
+
+    src.delete(); rgb.delete(); blurred.delete();
+    rgbF.delete(); blurredF.delete(); flat.delete(); flat8.delete(); rgba.delete();
+
+    // Pass 2: a light levels/contrast stretch — the flat-field pass already
+    // did most of the work, this just adds crispness on top of it.
+    var ctx = canvas.getContext('2d', { willReadFrequently: true });
     var imgData = ctx.getImageData(0, 0, w, h);
     var data = imgData.data;
     var n = data.length / 4;
@@ -533,7 +636,7 @@
       histogram[lum >= 255 ? 255 : lum]++;
     }
 
-    var clip = n * 0.01; // ignore the extreme 1% at each end as noise/outliers
+    var clip = n * 0.01;
     var blackPoint = 0, cum = 0;
     for (var v = 0; v < 256; v++) {
       cum += histogram[v];
@@ -545,10 +648,10 @@
       cum += histogram[v2];
       if (cum > clip) { whitePoint = v2; break; }
     }
-    if (whitePoint <= blackPoint) return; // degenerate (near-solid) image — leave it alone
+    if (whitePoint <= blackPoint) return;
 
     var range = whitePoint - blackPoint;
-    var CONTRAST = 1.15; // a little extra punch beyond the pure levels stretch
+    var CONTRAST = 1.08;
     for (var j = 0; j < data.length; j += 4) {
       for (var c = 0; c < 3; c++) {
         var val = ((data[j + c] - blackPoint) / range) * 255;
@@ -765,6 +868,18 @@
   var lsOverlay = document.getElementById('lsOverlay');
   var lsMsg = document.getElementById('lsMsg');
   var lsBottombar = document.getElementById('lsBottombar');
+  var lsContinuousToggle = document.getElementById('lsContinuousToggle');
+  var lsCounterBadge = document.getElementById('lsCounterBadge');
+  var lsCounterThumb = document.getElementById('lsCounterThumb');
+  var lsCounterN = document.getElementById('lsCounterN');
+  var lsContinuous = false;
+  var lsCapturedCount = 0;
+  var lsBadgeThumbUrl = null;
+
+  lsContinuousToggle.addEventListener('click', function () {
+    lsContinuous = !lsContinuous;
+    lsContinuousToggle.setAttribute('aria-pressed', String(lsContinuous));
+  });
 
   function openLiveScanner() {
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
@@ -775,6 +890,8 @@
     lsMsg.hidden = false;
     lsMsg.textContent = 'Starting camera…';
     lsBottombar.hidden = true;
+    lsCounterBadge.hidden = true;
+    lsCapturedCount = 0;
 
     ensureScanner().then(function () {
       return navigator.mediaDevices.getUserMedia({
@@ -806,6 +923,9 @@
     if (lsStream) { lsStream.getTracks().forEach(function (t) { t.stop(); }); lsStream = null; }
     lsVideo.srcObject = null;
     liveScannerEl.hidden = true;
+    if (lsBadgeThumbUrl) { URL.revokeObjectURL(lsBadgeThumbUrl); lsBadgeThumbUrl = null; }
+    lsCounterBadge.hidden = true;
+    lsCapturedCount = 0;
   }
 
   // Draws only the detected outline onto a transparent overlay canvas that
@@ -861,8 +981,21 @@
       var out = cropCanvasToPaper(scannerInstance, lsSourceCanvas);
       out.resultCanvas.toBlob(function (blob) {
         if (!blob) return;
-        closeLiveScanner();
         addCapturedBlob(blob, out.detected);
+        lsCapturedCount++;
+        if (lsContinuous) {
+          // Stay open: show what was just captured in the corner badge and
+          // re-arm the shutter so the user can keep going hands-free.
+          if (lsBadgeThumbUrl) URL.revokeObjectURL(lsBadgeThumbUrl);
+          lsBadgeThumbUrl = URL.createObjectURL(blob);
+          lsCounterThumb.src = lsBadgeThumbUrl;
+          lsCounterN.textContent = lsCapturedCount;
+          lsCounterBadge.hidden = false;
+          lsMsg.hidden = true;
+          lsBottombar.hidden = false;
+        } else {
+          closeLiveScanner();
+        }
       }, 'image/jpeg', 0.92);
     }, 30);
   }
